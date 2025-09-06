@@ -4,11 +4,28 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
-@SuppressWarnings("ClassCanBeRecord")
-public final class IdempotencyToken {
-	private final String tokenId;
-	private final Instant generationTime;
-
+/**
+ * Represents an idempotency token used to ensure that
+ * requests are not processed more than once in a distributed system.
+ *
+ * <p>Backed by a cryptographically secure UUID v7 for uniqueness
+ * and time-ordering, plus a generation timestamp for traceability.</p>
+ *
+ * <p>Typical usage:
+ * <pre>
+ *     IdempotencyToken token = IdempotencyToken.generate();
+ *     String tokenValue = token.asString();
+ *
+ *     // store tokenValue in DB or send in API request
+ * </pre></p>
+ *
+ * @param tokenId        identifier (must be a valid UUID v7 string)
+ * @param generationTime timestamp when the token was created
+ *
+ * @author Riyane
+ * @version 1.0.0
+ */
+public record IdempotencyToken(String tokenId, Instant generationTime) {
 	/**
 	 * Creates a new token with a given ID and current timestamp.
 	 *
@@ -21,10 +38,10 @@ public final class IdempotencyToken {
 	/**
 	 * Creates a new token with explicit ID and timestamp.
 	 *
-	 * @param tokenId identifier (must be a valid UUID v7 string)
+	 * @param tokenId        identifier (must be a valid UUID v7 string)
 	 * @param generationTime timestamp when the token was created
 	 */
-	public IdempotencyToken(String tokenId, Instant generationTime) {
+	public IdempotencyToken {
 		Objects.requireNonNull(tokenId, "tokenId must not be null");
 		Objects.requireNonNull(generationTime, "generationTime must not be null");
 
@@ -33,9 +50,6 @@ public final class IdempotencyToken {
 		} catch (IllegalArgumentException exception) {
 			throw new IllegalArgumentException("tokenId must be a valid UUID string", exception);
 		}
-
-		this.tokenId = tokenId;
-		this.generationTime = generationTime;
 	}
 
 	/**
@@ -52,7 +66,8 @@ public final class IdempotencyToken {
 	 *
 	 * @return token string
 	 */
-	public String getTokenId() {
+	@Override
+	public String tokenId() {
 		return tokenId;
 	}
 
@@ -61,7 +76,8 @@ public final class IdempotencyToken {
 	 *
 	 * @return timestamp
 	 */
-	public Instant getGenerationTime() {
+	@Override
+	public Instant generationTime() {
 		return generationTime;
 	}
 
@@ -75,21 +91,16 @@ public final class IdempotencyToken {
 	}
 
 	@Override
-	public int hashCode() {
-		return Objects.hash(tokenId, generationTime);
-	}
-
-	@Override
 	public boolean equals(Object obj) {
 		if (this == obj)
 			return true;
 
-		if (obj instanceof IdempotencyToken token) {
-			return this.getTokenId().equals(token.getTokenId())
-					&& this.getGenerationTime().equals(token.getGenerationTime());
+		if (obj instanceof IdempotencyToken(String id, Instant time)) {
+			return this.tokenId().equals(id)
+					&& this.generationTime().equals(time);
 		}
 
-		return super.equals(obj);
+		return false;
 	}
 
 	@Override
