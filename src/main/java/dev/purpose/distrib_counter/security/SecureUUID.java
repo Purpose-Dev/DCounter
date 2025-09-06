@@ -7,28 +7,25 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * Utility class for generating cryptographically secure UUIDs (version 4).
+ * Utility class for generating cryptographically secure UUIDs (version 4 & 7).
  *
- * <p>Compliant with RFC 4122. Uses ThreadLocal&lt;SecureRandom&gt; to ensure
- * both cryptographic strength and high performance in multithreaded environments.</p>
+ * <p>Compliant with RFC 4122 (v4 & v7 draft-19).
+ * Uses ThreadLocal&lt;SecureRandom&gt; to ensure both cryptographic
+ * strength and high performance in multithreaded environments.</p>
  *
  * <p>Strength can be configured via system property:
  * <code>-Dsecure_uuid.mode=STRONG</code> or <code>-Dsecure_uuid.mode=DEFAULT</code>
  * Default is STRONG when available, otherwise falls back to DEFAULT.</p>
  *
- * <p>Modes:
- * <ul>
- *     <li>{@link RandomStrength#STRONG}: uses {@code SecureRandom.getInstanceStrong()}</li>
- *     <li>{@link RandomStrength#DEFAULT}: used {@code new SecureRandom()}</li>
- * </ul></p>
- *
  * @author Riyane
- * @version 1.0.0
+ * @version 1.1.0
  */
 public final class SecureUUID {
 	private static final RandomStrength MODE = RandomStrength.fromProperty();
-	private static final ThreadLocal<byte[]> buffer = ThreadLocal.withInitial(() -> new byte[16]);
-	private static final SecureRandom SECURE_RANDOM = createSecureRandom();
+	private static final ThreadLocal<byte[]> V4_BUFFER = ThreadLocal.withInitial(() -> new byte[16]);
+	private static final ThreadLocal<byte[]> V7_BUFFER = ThreadLocal.withInitial(() -> new byte[10]);
+	private static final ThreadLocal<SecureRandom> SECURE_RANDOM =
+			ThreadLocal.withInitial(SecureUUID::createSecureRandom);
 
 	private SecureUUID() {
 		throw new AssertionError("SecureUUID class - do not instantiate");
@@ -47,13 +44,13 @@ public final class SecureUUID {
 	}
 
 	/**
-	 * Generates a cryptographically secure random UUID (version 4)
+	 * Generates a cryptographically secure random UUID V4
 	 *
 	 * @return a new UUID (v4) compliant with RFC 4122
 	 */
-	public static UUID generate() {
-		byte[] randomBytes = buffer.get();
-		SECURE_RANDOM.nextBytes(randomBytes);
+	public static UUID generateV4() {
+		byte[] randomBytes = V4_BUFFER.get();
+		SECURE_RANDOM.get().nextBytes(randomBytes);
 
 		randomBytes[6] &= 0x0f;
 		randomBytes[6] |= 0x40; // version to 4
@@ -71,12 +68,47 @@ public final class SecureUUID {
 	}
 
 	/**
-	 * Convenience method for directly getting the UUID as a String
+	 * Generates a cryptographically secure random UUID V7
 	 *
-	 * @return a Secure UUID (String representation)
+	 * @return a new UUID (v7) compliant with RFC 4122
 	 */
-	public static String generateAsString() {
-		return generate().toString();
+	public static UUID generateV7() {
+		long timestamp = System.currentTimeMillis();
+		byte[] randomBytes = V7_BUFFER.get();
+		SECURE_RANDOM.get().nextBytes(randomBytes);
+
+		long mostSigBits = (timestamp & 0xFFFFFFFFFFFFL) << 16;
+		mostSigBits |= (0x7L << 12);
+		mostSigBits |= ((randomBytes[0] & 0x0F) << 8) | (randomBytes[1] & 0xFF);
+
+		long leastSigBits = 0;
+		for (int i = 2; i < 10; i++) {
+			leastSigBits = (leastSigBits << 8) | (randomBytes[i] & 0xFFL);
+		}
+		leastSigBits &= 0x3FFFFFFFFFFFFFFFL;
+		leastSigBits |= 0x8000000000000000L;
+
+		UUID uuid = new UUID(mostSigBits, leastSigBits);
+		assert uuid.version() == 7 && uuid.variant() == 2 : "Generated UUID not RFC 4122 v7";
+		return uuid;
+	}
+
+	/**
+	 * Convenience method for directly getting the UUID v4 as a String
+	 *
+	 * @return a Secure UUID v4 (String representation)
+	 */
+	public static String generateV4AsString() {
+		return generateV4().toString();
+	}
+
+	/**
+	 * Convenience method for directly getting the UUID v7 as a String
+	 *
+	 * @return a secure UUID v7 (String representation)
+	 */
+	public static String generateV7AsString() {
+		return generateV7().toString();
 	}
 
 	/**
