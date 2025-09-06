@@ -49,7 +49,7 @@ public final class SecureUUID {
 	 * @return a new UUID (v4) compliant with RFC 4122
 	 */
 	public static UUID generateV4() {
-		byte[] randomBytes = V4_BUFFER.get();
+		final byte[] randomBytes = V4_BUFFER.get();
 		SECURE_RANDOM.get().nextBytes(randomBytes);
 
 		randomBytes[6] &= 0x0f;
@@ -58,12 +58,11 @@ public final class SecureUUID {
 		randomBytes[8] |= (byte) 0x80; // RFC 4122 variant
 
 		ByteBuffer byteBuffer = ByteBuffer.wrap(randomBytes);
-		long mostSigBits = byteBuffer.getLong();
-		long leastSigBits = byteBuffer.getLong();
+		final long mostSigBits = byteBuffer.getLong();
+		final long leastSigBits = byteBuffer.getLong();
 
 		UUID uuid = new UUID(mostSigBits, leastSigBits);
 		assert uuid.version() == 4 && uuid.variant() == 2 : "Generated UUID not RFC 4122 v4";
-
 		return uuid;
 	}
 
@@ -73,8 +72,8 @@ public final class SecureUUID {
 	 * @return a new UUID (v7) compliant with RFC 4122
 	 */
 	public static UUID generateV7() {
-		long timestamp = System.currentTimeMillis();
-		byte[] randomBytes = V7_BUFFER.get();
+		final long timestamp = System.currentTimeMillis();
+		final byte[] randomBytes = V7_BUFFER.get();
 		SECURE_RANDOM.get().nextBytes(randomBytes);
 
 		long mostSigBits = (timestamp & 0xFFFFFFFFFFFFL) << 16;
@@ -119,7 +118,7 @@ public final class SecureUUID {
 		DEFAULT;
 
 		static RandomStrength fromProperty() {
-			String value = System.getProperty("secure_uuid.mode", "STRONG")
+			final String value = System.getProperty("secure_uuid.mode", "STRONG")
 					.toUpperCase(Locale.ROOT);
 
 			try {
