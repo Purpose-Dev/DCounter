@@ -1,5 +1,7 @@
 package dev.purpose.distrib_counter.utils;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -103,6 +105,7 @@ public record IdempotencyToken(String tokenId, Instant generationTime) {
 		return false;
 	}
 
+	@NotNull
 	@Override
 	public String toString() {
 		return "IdempotencyToken(tokenId=%s, generationTime=%s)"

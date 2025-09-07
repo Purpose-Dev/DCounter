@@ -1,6 +1,7 @@
 package dev.purpose.distrib_counter.core;
 
 import dev.purpose.distrib_counter.utils.IdempotencyToken;
+import org.jetbrains.annotations.NotNull;
 
 import java.time.Instant;
 import java.util.Objects;
@@ -36,6 +37,7 @@ public record CounterResult(
 		this.token = token;
 	}
 
+	@NotNull
 	@Override
 	public String toString() {
 		return "CounterResult(value=%d, timestamp=%s, consistency=%s, token=%s)".formatted(
