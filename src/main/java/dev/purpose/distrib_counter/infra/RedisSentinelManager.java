@@ -24,6 +24,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 public final class RedisSentinelManager<K, V> implements AutoCloseable {
@@ -33,6 +34,7 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 	private final GenericObjectPool<StatefulRedisConnection<K, V>> pool;
 	private final Retry retry;
 	private final CircuitBreaker circuitBreaker;
+	private final ScheduledExecutorService scheduler;
 
 	private RedisSentinelManager(RedisSentinelConfig<K, V> config) {
 		Objects.requireNonNull(config, "config must not be null");
@@ -100,6 +102,15 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 				.build()
 		);
 
+		this.scheduler = Executors.newScheduledThreadPool(
+				Math.min(config.maxTotalConnections(), 8), r -> {
+					Thread thread = new Thread(r);
+					thread.setDaemon(true);
+					thread.setName("redis-retry-scheduler");
+					return thread;
+				}
+		);
+
 		log.info("RedisSentinelManager initialized with {} sentinels, master={}, tls={}",
 				config.sentinels(), config.masterId(), config.tlsEnabled()
 		);
@@ -141,13 +152,11 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 				return failed;
 			}
 		};
-		ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
-		return getTCompletableFuture(scheduler, supplier, connection);
+		return getTCompletableFuture(supplier, connection);
 	}
 
 	private <T> @NotNull CompletableFuture<T> getTCompletableFuture(
-			ScheduledExecutorService scheduler,
 			Supplier<CompletionStage<T>> supplier,
 			StatefulRedisConnection<K, V> connection
 	) {
@@ -181,6 +190,12 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 		try {
 			if (pool != null) {
 				pool.close();
+			}
+			if (scheduler != null) {
+				scheduler.shutdown();
+				if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+					scheduler.shutdownNow();
+				}
 			}
 			if (redisClient != null) {
 				redisClient.shutdown();
