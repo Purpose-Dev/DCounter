@@ -4,6 +4,15 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Immutable configuration for Redis Sentinel connectivity and pooling.
+ *
+ * <p>Encapsulates all parameters necessary for building a {@link RedisSentinelManager}.
+ * Provides defaults for resilience, pooling, and timeouts.</p>
+ *
+ * @author Riyane
+ * @version 1.0.0
+ */
 public final class RedisSentinelConfig {
 	private final List<String> sentinels;
 	private final String masterId;
