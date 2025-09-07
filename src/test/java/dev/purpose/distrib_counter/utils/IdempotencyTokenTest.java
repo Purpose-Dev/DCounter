@@ -1,4 +1,4 @@
-package dev.purpose.distrib_counter;
+package dev.purpose.distrib_counter.utils;
 
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;

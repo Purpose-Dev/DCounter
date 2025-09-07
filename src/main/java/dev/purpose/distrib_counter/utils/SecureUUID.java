@@ -1,4 +1,4 @@
-package dev.purpose.distrib_counter;
+package dev.purpose.distrib_counter.utils;
 
 import java.nio.ByteBuffer;
 import java.security.NoSuchAlgorithmException;
