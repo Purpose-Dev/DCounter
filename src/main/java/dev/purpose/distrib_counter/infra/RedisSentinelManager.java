@@ -9,15 +9,21 @@ import io.lettuce.core.ClientOptions;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.api.async.RedisAsyncCommands;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.lettuce.core.masterreplica.MasterReplica;
 import io.lettuce.core.support.ConnectionPoolSupport;
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 
 public final class RedisSentinelManager<K, V> implements AutoCloseable {
@@ -115,6 +121,61 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 		return decorated.get();
 	}
 
+	public <T> CompletionStage<T> executeAsync(AsyncRedisAction<RedisAsyncCommands<K, V>, T> action) {
+		final StatefulRedisConnection<K, V> connection;
+		try {
+			connection = pool.borrowObject();
+		} catch (Exception e) {
+			CompletableFuture<T> failed = new CompletableFuture<>();
+			failed.completeExceptionally(new RuntimeException("Unable to borrow Redis connection from pool", e));
+			return failed;
+		}
+
+		RedisAsyncCommands<K, V> asyncCommands = connection.async();
+		Supplier<CompletionStage<T>> supplier = () -> {
+			try {
+				return action.apply(asyncCommands);
+			} catch (Exception ex) {
+				CompletableFuture<T> failed = new CompletableFuture<>();
+				failed.completeExceptionally(ex);
+				return failed;
+			}
+		};
+		ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+		return getTCompletableFuture(scheduler, supplier, connection);
+	}
+
+	private <T> @NotNull CompletableFuture<T> getTCompletableFuture(
+			ScheduledExecutorService scheduler,
+			Supplier<CompletionStage<T>> supplier,
+			StatefulRedisConnection<K, V> connection
+	) {
+		Supplier<CompletionStage<T>> decorated = Retry.decorateCompletionStage(retry, scheduler, () ->
+				CircuitBreaker
+						.decorateCompletionStage(circuitBreaker, supplier)
+						.get()
+		);
+
+		CompletionStage<T> stage = decorated.get();
+
+		CompletableFuture<T> result = new CompletableFuture<>();
+		stage.whenComplete((value, error) -> {
+			try {
+				pool.returnObject(connection);
+			} catch (Exception re) {
+				log.warn("Failed to return Redis connection to pool", re);
+			}
+
+			if (error != null) {
+				result.completeExceptionally(error);
+			} else {
+				result.complete(value);
+			}
+		});
+		return result;
+	}
+
 	@Override
 	public void close() {
 		try {
@@ -133,5 +194,10 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 	@FunctionalInterface
 	public interface RedisAction<C, R> {
 		R apply(C commands) throws Exception;
+	}
+
+	@FunctionalInterface
+	public interface AsyncRedisAction<C, R> {
+		CompletionStage<R> apply(C commands) throws Exception;
 	}
 }
