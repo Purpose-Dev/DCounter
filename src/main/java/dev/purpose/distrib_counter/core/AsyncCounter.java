@@ -55,9 +55,7 @@ public interface AsyncCounter {
 		return addAndGet(namespace, counterName, -1);
 	}
 
-	CompletionStage<Void> get(String namespace, String counterName) throws CounterException;
-
-	;
+	CompletionStage<CounterResult> get(String namespace, String counterName) throws CounterException;
 
 	CompletionStage<Void> clear(String namespace, String counterName, IdempotencyToken token) throws CounterException;
 

@@ -73,8 +73,21 @@ public record BestEffortAsyncCounter(RedisSentinelManager<String, String> manage
 	}
 
 	@Override
-	public CompletionStage<Void> get(String namespace, String counterName) throws CounterException {
-		return null;
+	public CompletionStage<CounterResult> get(String namespace, String counterName) throws CounterException {
+		return manager.executeAsync(commands -> {
+			CompletableFuture<CounterResult> future = new CompletableFuture<>();
+			String counterKey = CounterUtils.key(namespace, counterName);
+
+			commands.get(counterKey).thenAccept(val -> {
+				long value = CounterUtils.parseLong(val);
+				future.complete(new CounterResult(value, Instant.now(), CounterConsistency.BEST_EFFORT, null));
+			}).exceptionally(throwable -> {
+				future.completeExceptionally(throwable);
+				return null;
+			});
+
+			return future;
+		});
 	}
 
 	@Override
