@@ -5,6 +5,7 @@ import dev.purpose.distrib_counter.core.CounterConsistency;
 import dev.purpose.distrib_counter.core.CounterException;
 import dev.purpose.distrib_counter.core.CounterResult;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
+import dev.purpose.distrib_counter.utils.CounterUtils;
 import dev.purpose.distrib_counter.utils.IdempotencyToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,13 +63,13 @@ public record BestEffortCounter(RedisSentinelManager<String, String> manager) im
 	public CounterResult addAndGet(String namespace, String counterName, long delta, IdempotencyToken token) throws CounterException {
 		try {
 			return manager.executeSync(commands -> {
-				String counterKey = key(namespace, counterName);
+				String counterKey = CounterUtils.key(namespace, counterName);
 
 				if (token != null) {
-					String idempotencyKey = idempotencyKey(namespace, counterName, token);
+					String idempotencyKey = CounterUtils.idempotencyKey(namespace, counterName, token);
 					boolean already = commands.exists(idempotencyKey) > 0;
 					if (already) {
-						long current = parseLong(commands.get(counterKey));
+						long current = CounterUtils.parseLong(commands.get(counterKey));
 						return new CounterResult(current, Instant.now(), CounterConsistency.BEST_EFFORT, token);
 					}
 					commands.set(idempotencyKey, "1");
@@ -87,8 +88,8 @@ public record BestEffortCounter(RedisSentinelManager<String, String> manager) im
 	public CounterResult get(String namespace, String counterName) throws CounterException {
 		try {
 			return manager.executeSync(commands -> {
-				String counterKey = key(namespace, counterName);
-				long value = parseLong(commands.get(counterKey));
+				String counterKey = CounterUtils.key(namespace, counterName);
+				long value = CounterUtils.parseLong(commands.get(counterKey));
 				return new CounterResult(value, Instant.now(), CounterConsistency.BEST_EFFORT, null);
 			});
 		} catch (Exception exception) {
@@ -101,10 +102,10 @@ public record BestEffortCounter(RedisSentinelManager<String, String> manager) im
 	public void clear(String namespace, String counterName, IdempotencyToken token) throws CounterException {
 		try {
 			manager.executeSync(commands -> {
-				String counterKey = key(namespace, counterName);
+				String counterKey = CounterUtils.key(namespace, counterName);
 
 				if (token != null) {
-					String idempotencyKey = idempotencyKey(namespace, counterName, token);
+					String idempotencyKey = CounterUtils.idempotencyKey(namespace, counterName, token);
 					boolean already = commands.exists(idempotencyKey) > 0;
 					if (already)
 						return null;
@@ -117,24 +118,6 @@ public record BestEffortCounter(RedisSentinelManager<String, String> manager) im
 		} catch (Exception exception) {
 			log.error("Redis addAndGet failed", exception);
 			throw new CounterException("Failed to clear counter in Redis", "REDIS_ERROR", exception);
-		}
-	}
-
-	private static String key(String namespace, String counterName) {
-		return "counter:%s:%s".formatted(namespace, counterName);
-	}
-
-	private static String idempotencyKey(String namespace, String counterName, IdempotencyToken token) {
-		return "idempotency:%s:%s:%s".formatted(namespace, counterName, token.asString());
-	}
-
-	private static long parseLong(String redisValue) {
-		if (redisValue == null)
-			return 0L;
-		try {
-			return Long.parseLong(redisValue);
-		} catch (NumberFormatException exception) {
-			return 0L;
 		}
 	}
 }
