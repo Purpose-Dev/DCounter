@@ -64,6 +64,54 @@ public interface Counter {
 	}
 
 	/**
+	 * Decrement the counter by one.
+	 *
+	 * @param namespace   logical namespace
+	 * @param counterName counter name
+	 * @throws CounterException if the operation fails
+	 */
+	default void decrement(String namespace, String counterName) throws CounterException {
+		add(namespace, counterName, -1);
+	}
+
+	/**
+	 * Decrement the counter by one with an idempotency token.
+	 *
+	 * @param namespace   logical namespace
+	 * @param counterName counter name
+	 * @param token       idempotency token
+	 * @throws CounterException if the operation fails
+	 */
+	default void decrement(String namespace, String counterName, IdempotencyToken token) throws CounterException {
+		add(namespace, counterName, -1, token);
+	}
+
+	/**
+	 * Decrement the counter by one and return the result.
+	 *
+	 * @param namespace   logical namespace
+	 * @param counterName counter name
+	 * @return Counter result of the operation
+	 * @throws CounterException if the operation fails
+	 */
+	default CounterResult decrementAndGet(String namespace, String counterName) throws CounterException {
+		return addAndGet(namespace, counterName, -1);
+	}
+
+	/**
+	 * Decrement the counter by one with an idempotency token and return the result.
+	 *
+	 * @param namespace   logical namespace
+	 * @param counterName counter name
+	 * @param token       idempotency token
+	 * @return Counter result of the operation
+	 * @throws CounterException if the operation fails
+	 */
+	default CounterResult decrementAndGet(String namespace, String counterName, IdempotencyToken token) throws CounterException {
+		return addAndGet(namespace, counterName, -1, token);
+	}
+
+	/**
 	 * Get the current value of the counter.
 	 *
 	 * @param namespace   logical namespace

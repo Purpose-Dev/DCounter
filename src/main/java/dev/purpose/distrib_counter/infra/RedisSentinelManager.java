@@ -36,7 +36,7 @@ public final class RedisSentinelManager<K, V> implements AutoCloseable {
 	private final CircuitBreaker circuitBreaker;
 	private final ScheduledExecutorService scheduler;
 
-	private RedisSentinelManager(RedisSentinelConfig<K, V> config) {
+	public RedisSentinelManager(RedisSentinelConfig<K, V> config) {
 		Objects.requireNonNull(config, "config must not be null");
 
 		RedisURI.Builder redisUriBuilder = RedisURI.builder()
