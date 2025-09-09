@@ -15,6 +15,16 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+/**
+ * Asynchronous implementation of {@link AsyncCounter} using Redis best-effort semantics.
+ *
+ * <p>Relies on Redis INCRBY/SET commands without global ordering guarantees.
+ * Supports optional idempotency via per-operation Redis keys.</p>
+ *
+ * @param manager Redis sentinel manager
+ * @author Riyane
+ * @version 1.0.0
+ */
 public record BestEffortAsyncCounter(RedisSentinelManager<String, String> manager) implements AsyncCounter {
 	private static final Logger log = LoggerFactory.getLogger(BestEffortAsyncCounter.class);
 
@@ -92,6 +102,37 @@ public record BestEffortAsyncCounter(RedisSentinelManager<String, String> manage
 
 	@Override
 	public CompletionStage<Void> clear(String namespace, String counterName, IdempotencyToken token) throws CounterException {
-		return null;
+		return manager.executeAsync(commands -> {
+			CompletableFuture<Void> future = new CompletableFuture<>();
+			String counterKey = CounterUtils.key(namespace, counterName);
+
+			if (token != null) {
+				String idempotencyKey = CounterUtils.idempotencyKey(namespace, counterName, token);
+				commands.exists(idempotencyKey).thenAccept(exists -> {
+					if (exists != null && exists > 0) {
+						future.complete(null);
+					} else {
+						commands.set(idempotencyKey, "1").thenCompose(ok ->
+										commands.set(counterKey, "0")
+								).thenAccept(ok -> future.complete(null))
+								.exceptionally(throwable -> {
+									future.completeExceptionally(throwable);
+									return null;
+								});
+					}
+				}).exceptionally(throwable -> {
+					future.completeExceptionally(throwable);
+					return null;
+				});
+			} else {
+				commands.set(counterKey, "0").thenAccept(ok -> future.complete(null))
+						.exceptionally(throwable -> {
+							future.completeExceptionally(throwable);
+							return null;
+						});
+			}
+
+			return future;
+		});
 	}
 }
