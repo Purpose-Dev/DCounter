@@ -1,4 +1,4 @@
-package dev.purpose.distrib_counter.impl;
+package dev.purpose.distrib_counter.impl.sync;
 
 import dev.purpose.distrib_counter.core.Counter;
 import dev.purpose.distrib_counter.core.CounterConsistency;
