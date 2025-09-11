@@ -20,11 +20,11 @@ public final class CounterUtils {
 		return "counter:%s:%s:total".formatted(namespace, counterName);
 	}
 
-	public static String deltaKey(String namespace, String counterName, String nodeId) {
+	public static String deltaKeyForNode(String namespace, String counterName, String nodeId) {
 		return "counter:%s:%s:deltas:%s".formatted(namespace, counterName, nodeId);
 	}
 
-	public static String deltaKey(String namespace, String counterNamePattern) {
+	public static String deltaKeyPattern(String namespace, String counterNamePattern) {
 		return "counter:%s:%s:deltas:%s".formatted(namespace, counterNamePattern, "");
 	}
 
