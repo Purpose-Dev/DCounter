@@ -14,10 +14,38 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.HashSet;
 import java.util.Objects;
-import java.util.Set;
 
+/**
+ * Eventually-consistent implementation of {@link Counter}.
+ *
+ * <p>Writes are appended to per-node "delta" keys and consolidated asynchronously.
+ * Reads compute the value as:</p>
+ * <pre>
+ *     total = rollup-total + sum(all-delta-keys)
+ * </pre>
+ *
+ * <p>This guarantees freshness at the cost of higher read latency
+ * (since all delta keys must be scanned). Rollup processes may periodically
+ * aggregate deltas into the total key for efficiency.</p>
+ *
+ * <h4>Redis key schema:</h4>
+ * <ul>
+ *     <li>{@code counter:{ns}:{name}:total} → consolidated value</li>
+ *     <li>{@code counter:{ns}:{name}:deltas:{nodeId}} → local increments for this node</li>
+ * </ul>
+ *
+ * <h4>Consistency:</h4>
+ * Returned values are marked as {@link CounterConsistency#EVENTUALLY_CONSISTENT}.
+ *
+ * <h4>Thread-safety:</h4>
+ * This class is safe for concurrent use.
+ *
+ * @param manager Sentinel manager
+ * @param nodeId  Local node Id
+ * @author Riyane
+ * @version 0.9.5
+ */
 public record EventuallyConsistentCounter(
 		RedisSentinelManager<String, String> manager,
 		String nodeId
