@@ -4,77 +4,86 @@ import dev.purpose.distrib_counter.core.AsyncCounter;
 import dev.purpose.distrib_counter.core.Counter;
 import dev.purpose.distrib_counter.core.CounterConsistency;
 import dev.purpose.distrib_counter.impl.async.BestEffortAsyncCounter;
+import dev.purpose.distrib_counter.impl.async.EventuallyConsistentAsyncCounter;
 import dev.purpose.distrib_counter.impl.sync.BestEffortCounter;
+import dev.purpose.distrib_counter.impl.sync.EventuallyConsistentCounter;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
 
 import java.util.Objects;
 
 /**
- * Centralized factory for creating both synchronous {@link Counter} and asynchronous {@link AsyncCounter}
- * implementations backed by Redis.
+ * Factory for building synchronous or asynchronous counters
+ * with a chosen consistency model.
  *
- * <p>Selection is based on the requested {@link CounterConsistency} level.</p>
- *
- * <h4>Usage example:</h4>
- * <pre>{@code
- * RedisSentinelManager<String, String> manager = new RedisSentinelManager(config);
- * CounterFactory factory = new CounterFactory(manager);
- *
- * Counter sync = factory.createCounter(CounterConsistency.BEST_EFFORT);
- * AsyncCounter async = factory.createAsyncCounter(CounterConsistency.BEST_EFFORT);
- * }</pre>
- *
- * <h4>Extensibility:</h4>
- * New implementations can be added to the switch logic without impacting clients.
+ * <p>Supports:
+ * <ul>
+ *     <li>{@link CounterConsistency#BEST_EFFORT}</li>
+ *     <li>{@link CounterConsistency#EVENTUALLY_CONSISTENT}</li>
+ * </ul></p>
+ * <p>
+ * Usage:
+ * <pre>
+ * Counter c1 = CounterFactory.createCounter(manager, CounterConsistency.BEST_EFFORT);
+ * AsyncCounter c2 = CounterFactory.createAsyncCounter(manager, CounterConsistency.EVENTUALLY_CONSISTENT, "nodeA");
+ * </pre>
  *
  * @author Riyane
- * @version 1.0.0
+ * @version 0.9.8
  */
-public record CounterFactory(RedisSentinelManager<String, String> manager) {
-	public CounterFactory(RedisSentinelManager<String, String> manager) {
-		this.manager = Objects.requireNonNull(manager, "manager must not be null");
+public final class CounterFactory {
+
+	private CounterFactory() {
 	}
 
 	/**
-	 * Exposes the underlying Redis manager for advanced usage.
+	 * Create a synchronous counter with the given consistency.
 	 *
-	 * @return the underlying Redis manager.
+	 * @param manager     Redis sentinel manager
+	 * @param consistency desired consistency model
+	 * @param nodeId      required for eventually consistent counters (ignored otherwise)
+	 * @return a Counter implementation
 	 */
-	public RedisSentinelManager<String, String> manager() {
-		return manager;
-	}
+	public static Counter createCounter(
+			RedisSentinelManager<String, String> manager,
+			CounterConsistency consistency,
+			String nodeId
+	) {
+		Objects.requireNonNull(manager, "manager must not be null");
+		Objects.requireNonNull(consistency, "consistency must not be null");
 
-	/**
-	 * Create a synchronous counter for the given consistency level.
-	 *
-	 * @param consistency desired consistency level
-	 * @return a {@link Counter} implementation
-	 */
-	public Counter createCounter(CounterConsistency consistency) {
 		return switch (consistency) {
 			case BEST_EFFORT -> new BestEffortCounter(manager);
-			/*case EVENTUALLY_CONSISTENT -> null;
-			case ACCURATE -> null;*/
-			default -> throw new UnsupportedOperationException(
-					"Unsupported consistency: " + consistency
-			);
+			case EVENTUALLY_CONSISTENT -> {
+				Objects.requireNonNull(nodeId, "nodeId required for eventually consistent counter");
+				yield new EventuallyConsistentCounter(manager, nodeId);
+			}
+			case ACCURATE -> throw new UnsupportedOperationException("Accurate counter not yet implemented");
 		};
 	}
 
 	/**
-	 * Create an asynchronous counter for the given consistency level.
+	 * Create an asynchronous counter with the given consistency.
 	 *
-	 * @param consistency desired consistency level
-	 * @return a {@link AsyncCounter} implementation
+	 * @param manager     Redis sentinel manager
+	 * @param consistency desired consistency model
+	 * @param nodeId      required for eventually consistent counters (ignored otherwise)
+	 * @return an AsyncCounter implementation
 	 */
-	public AsyncCounter createAsyncCounter(CounterConsistency consistency) {
+	public static AsyncCounter createAsyncCounter(
+			RedisSentinelManager<String, String> manager,
+			CounterConsistency consistency,
+			String nodeId
+	) {
+		Objects.requireNonNull(manager, "manager must not be null");
+		Objects.requireNonNull(consistency, "consistency must not be null");
+
 		return switch (consistency) {
 			case BEST_EFFORT -> new BestEffortAsyncCounter(manager);
-			/*case EVENTUALLY_CONSISTENT -> null;
-			case ACCURATE -> null;*/
-			default -> throw new UnsupportedOperationException(
-					"Unsupported consistency: " + consistency
-			);
+			case EVENTUALLY_CONSISTENT -> {
+				Objects.requireNonNull(nodeId, "nodeId required for eventually consistent async counter");
+				yield new EventuallyConsistentAsyncCounter(manager, nodeId);
+			}
+			case ACCURATE -> throw new UnsupportedOperationException("Accurate async counter not yet implemented");
 		};
 	}
 }
