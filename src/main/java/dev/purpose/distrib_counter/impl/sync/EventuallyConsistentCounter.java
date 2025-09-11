@@ -7,6 +7,9 @@ import dev.purpose.distrib_counter.core.CounterResult;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
 import dev.purpose.distrib_counter.utils.CounterUtils;
 import dev.purpose.distrib_counter.utils.IdempotencyToken;
+import io.lettuce.core.KeyScanCursor;
+import io.lettuce.core.ScanArgs;
+import io.lettuce.core.api.sync.RedisCommands;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,7 +40,7 @@ public record EventuallyConsistentCounter(
 					}
 					commands.set(idempotencyKey, "1");
 				}
-				commands.incrby(CounterUtils.deltaKey(namespace, counterName), delta);
+				commands.incrby(CounterUtils.deltaKeyForNode(namespace, counterName, nodeId), delta);
 				return null;
 			});
 		} catch (Exception exception) {
@@ -58,13 +61,9 @@ public record EventuallyConsistentCounter(
 			return manager.executeSync(commands -> {
 				String totalKey = CounterUtils.totalKey(namespace, counterName);
 				long total = CounterUtils.parseLong(commands.get(totalKey));
-				long deltaSum = 0L;
 
-				String deltaKey = CounterUtils.deltaKey(namespace, counterNamePrefix() + "*");
-				Set<String> keys = new HashSet<>(commands.keys(deltaKey));
-				for (String key : keys) {
-					deltaSum += CounterUtils.parseLong(commands.get(key));
-				}
+				String pattern = CounterUtils.deltaKeyPattern(namespace, counterNamePrefix() + "*");
+				long deltaSum = sumDeltasViaScan(commands, pattern);
 
 				long value = total + deltaSum;
 				return new CounterResult(value, Instant.now(), CounterConsistency.EVENTUALLY_CONSISTENT, null);
@@ -90,11 +89,8 @@ public record EventuallyConsistentCounter(
 				String totalKey = CounterUtils.totalKey(namespace, counterName);
 				commands.set(totalKey, "0");
 
-				String deltaKey = CounterUtils.deltaKey(namespace, counterNamePrefix() + "*");
-				Set<String> keys = new HashSet<>(commands.keys(deltaKey));
-				for (String key : keys) {
-					commands.del(key);
-				}
+				String pattern = CounterUtils.deltaKeyPattern(namespace, counterNamePrefix() + "*");
+				deleteKeysViaScan(commands, pattern);
 				return null;
 			});
 		} catch (Exception exception) {
@@ -105,5 +101,40 @@ public record EventuallyConsistentCounter(
 
 	private String counterNamePrefix() {
 		return ""; // for key scanning convenience
+	}
+
+	private long sumDeltasViaScan(RedisCommands<String, String> commands, String pattern) {
+		long sum = 0L;
+		ScanArgs scanArgs = ScanArgs.Builder.matches(pattern).limit(200);
+		KeyScanCursor<String> cursor = commands.scan(scanArgs);
+
+		for (String key : cursor.getKeys()) {
+			sum += CounterUtils.parseLong(commands.get(key));
+		}
+
+		while (!cursor.isFinished()) {
+			cursor = commands.scan(cursor);
+			for (String key : cursor.getKeys()) {
+				sum += CounterUtils.parseLong(commands.get(key));
+			}
+		}
+
+		return sum;
+	}
+
+	private void deleteKeysViaScan(RedisCommands<String, String> commands, String pattern) {
+		ScanArgs scanArgs = ScanArgs.Builder.matches(pattern).limit(200);
+		KeyScanCursor<String> cursor = commands.scan(scanArgs);
+
+		for (String key : cursor.getKeys()) {
+			commands.del(key);
+		}
+
+		while (!cursor.isFinished()) {
+			cursor = commands.scan(cursor);
+			for (String key : cursor.getKeys()) {
+				commands.del(key);
+			}
+		}
 	}
 }
