@@ -7,33 +7,26 @@ import dev.purpose.distrib_counter.core.CounterResult;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
 import dev.purpose.distrib_counter.utils.CounterUtils;
 import dev.purpose.distrib_counter.utils.IdempotencyToken;
-import io.lettuce.core.KeyScanCursor;
-import io.lettuce.core.ScanArgs;
-import io.lettuce.core.api.sync.RedisCommands;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Objects;
 
 /**
- * Eventually-consistent implementation of {@link Counter}.
+ * Eventually-consistent counter based on Redis HASH.
  *
- * <p>Writes are appended to per-node "delta" keys and consolidated asynchronously.
- * Reads compute the value as:</p>
- * <pre>
- *     total = rollup-total + sum(all-delta-keys)
- * </pre>
- *
- * <p>This guarantees freshness at the cost of higher read latency
- * (since all delta keys must be scanned). Rollup processes may periodically
- * aggregate deltas into the total key for efficiency.</p>
- *
- * <h4>Redis key schema:</h4>
- * <ul>
- *     <li>{@code counter:{ns}:{name}:total} → consolidated value</li>
- *     <li>{@code counter:{ns}:{name}:deltas:{nodeId}} → local increments for this node</li>
- * </ul>
+ * <p>Each counter is stored as a Redis hash under a key:
+ * <pre>counter:{namespace}:{counterName}</pre>
+ * <p>
+ * Each node contributes deltas via {@code HINCRBY} on its own field
+ * (field name = nodeId). Reading sums all fields via {@code HGETALL}.
+ * <p>
+ * This design avoids expensive SCAN/KEYS operations and ensures
+ * O(number of nodes) complexity per read.</p>
+ * <p>
+ * Guarantees: {@link CounterConsistency#EVENTUALLY_CONSISTENT}
  *
  * <h4>Consistency:</h4>
  * Returned values are marked as {@link CounterConsistency#EVENTUALLY_CONSISTENT}.
@@ -68,7 +61,7 @@ public record EventuallyConsistentCounter(
 					}
 					commands.set(idempotencyKey, "1");
 				}
-				commands.incrby(CounterUtils.deltaKeyForNode(namespace, counterName, nodeId), delta);
+				commands.hincrby(CounterUtils.key(namespace, counterName), nodeId, delta);
 				return null;
 			});
 		} catch (Exception exception) {
@@ -87,14 +80,14 @@ public record EventuallyConsistentCounter(
 	public CounterResult get(String namespace, String counterName) throws CounterException {
 		try {
 			return manager.executeSync(commands -> {
-				String totalKey = CounterUtils.totalKey(namespace, counterName);
-				long total = CounterUtils.parseLong(commands.get(totalKey));
+				String counterKey = CounterUtils.key(namespace, counterName);
+				Map<String, String> allDeltas = commands.hgetall(counterKey);
+				long total = allDeltas.values()
+						.stream()
+						.mapToLong(CounterUtils::parseLong)
+						.sum();
 
-				String pattern = CounterUtils.deltaKeyPattern(namespace, counterNamePrefix() + "*");
-				long deltaSum = sumDeltasViaScan(commands, pattern);
-
-				long value = total + deltaSum;
-				return new CounterResult(value, Instant.now(), CounterConsistency.EVENTUALLY_CONSISTENT, null);
+				return new CounterResult(total, Instant.now(), CounterConsistency.EVENTUALLY_CONSISTENT, null);
 			});
 		} catch (Exception exception) {
 			log.error("Redis get failed", exception);
@@ -114,55 +107,13 @@ public record EventuallyConsistentCounter(
 					commands.set(idempotencyKey, "1");
 				}
 
-				String totalKey = CounterUtils.totalKey(namespace, counterName);
-				commands.set(totalKey, "0");
-
-				String pattern = CounterUtils.deltaKeyPattern(namespace, counterNamePrefix() + "*");
-				deleteKeysViaScan(commands, pattern);
+				String counterKey = CounterUtils.key(namespace, counterName);
+				commands.del(counterKey);
 				return null;
 			});
 		} catch (Exception exception) {
 			log.error("Redis clear failed", exception);
 			throw new CounterException("Failed to clear counter", "REDIS_ERROR", exception);
-		}
-	}
-
-	private String counterNamePrefix() {
-		return ""; // for key scanning convenience
-	}
-
-	private long sumDeltasViaScan(RedisCommands<String, String> commands, String pattern) {
-		long sum = 0L;
-		ScanArgs scanArgs = ScanArgs.Builder.matches(pattern).limit(200);
-		KeyScanCursor<String> cursor = commands.scan(scanArgs);
-
-		for (String key : cursor.getKeys()) {
-			sum += CounterUtils.parseLong(commands.get(key));
-		}
-
-		while (!cursor.isFinished()) {
-			cursor = commands.scan(cursor);
-			for (String key : cursor.getKeys()) {
-				sum += CounterUtils.parseLong(commands.get(key));
-			}
-		}
-
-		return sum;
-	}
-
-	private void deleteKeysViaScan(RedisCommands<String, String> commands, String pattern) {
-		ScanArgs scanArgs = ScanArgs.Builder.matches(pattern).limit(200);
-		KeyScanCursor<String> cursor = commands.scan(scanArgs);
-
-		for (String key : cursor.getKeys()) {
-			commands.del(key);
-		}
-
-		while (!cursor.isFinished()) {
-			cursor = commands.scan(cursor);
-			for (String key : cursor.getKeys()) {
-				commands.del(key);
-			}
 		}
 	}
 }
