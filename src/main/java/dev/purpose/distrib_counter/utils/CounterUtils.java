@@ -16,6 +16,18 @@ public final class CounterUtils {
 		return "idempotency:%s:%s:%s".formatted(namespace, counterName, token.asString());
 	}
 
+	public static String totalKey(String namespace, String counterName) {
+		return "counter:%s:%s:total".formatted(namespace, counterName);
+	}
+
+	public static String deltaKey(String namespace, String counterName, String nodeId) {
+		return "counter:%s:%s:deltas:%s".formatted(namespace, counterName, nodeId);
+	}
+
+	public static String deltaKey(String namespace, String counterNamePattern) {
+		return "counter:%s:%s:deltas:%s".formatted(namespace, counterNamePattern, "");
+	}
+
 	public static long parseLong(String redisValue) {
 		if (redisValue == null)
 			return 0L;
