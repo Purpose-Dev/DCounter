@@ -5,6 +5,7 @@ import dev.purpose.distrib_counter.core.Counter;
 import dev.purpose.distrib_counter.core.CounterConsistency;
 import dev.purpose.distrib_counter.impl.counters.async.BestEffortAsyncCounter;
 import dev.purpose.distrib_counter.impl.counters.async.EventuallyConsistentAsyncCounter;
+import dev.purpose.distrib_counter.impl.counters.sync.AccurateCounter;
 import dev.purpose.distrib_counter.impl.counters.sync.BestEffortCounter;
 import dev.purpose.distrib_counter.impl.counters.sync.EventuallyConsistentCounter;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
@@ -57,7 +58,10 @@ public final class CounterFactory {
 				Objects.requireNonNull(nodeId, "nodeId required for eventually consistent counter");
 				yield new EventuallyConsistentCounter(manager, nodeId);
 			}
-			case ACCURATE -> throw new UnsupportedOperationException("Accurate counter not yet implemented");
+			case ACCURATE -> {
+				Objects.requireNonNull(nodeId, "nodeId required for accurate counter");
+				yield new AccurateCounter(manager, nodeId);
+			}
 		};
 	}
 
