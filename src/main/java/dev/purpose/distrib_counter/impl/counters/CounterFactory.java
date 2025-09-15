@@ -3,10 +3,10 @@ package dev.purpose.distrib_counter.impl.counters;
 import dev.purpose.distrib_counter.core.AsyncCounter;
 import dev.purpose.distrib_counter.core.Counter;
 import dev.purpose.distrib_counter.core.CounterConsistency;
-import dev.purpose.distrib_counter.impl.async.BestEffortAsyncCounter;
-import dev.purpose.distrib_counter.impl.async.EventuallyConsistentAsyncCounter;
-import dev.purpose.distrib_counter.impl.sync.BestEffortCounter;
-import dev.purpose.distrib_counter.impl.sync.EventuallyConsistentCounter;
+import dev.purpose.distrib_counter.impl.counters.async.BestEffortAsyncCounter;
+import dev.purpose.distrib_counter.impl.counters.async.EventuallyConsistentAsyncCounter;
+import dev.purpose.distrib_counter.impl.counters.sync.BestEffortCounter;
+import dev.purpose.distrib_counter.impl.counters.sync.EventuallyConsistentCounter;
 import dev.purpose.distrib_counter.infra.RedisSentinelManager;
 
 import java.util.Objects;
