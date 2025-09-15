@@ -52,8 +52,8 @@ public record AccurateCounter(RedisSentinelManager<String, String> manager, Stri
 	public CounterResult addAndGet(String namespace, String counterName, long delta, IdempotencyToken token) throws CounterException {
 		try {
 			return manager.executeSync(commands -> {
-				String snapshotKey = snapshotKey(namespace, counterName);
-				String deltasKey = deltasKey(namespace, counterName);
+				String snapshotKey = CounterUtils.snapshotKey(namespace, counterName);
+				String deltasKey = CounterUtils.deltasKey(namespace, counterName);
 
 				if (token != null) {
 					String idempotencyKey = CounterUtils.idempotencyKey(namespace, counterName, token);
@@ -79,8 +79,8 @@ public record AccurateCounter(RedisSentinelManager<String, String> manager, Stri
 	public CounterResult get(String namespace, String counterName) throws CounterException {
 		try {
 			return manager.executeSync(commands -> {
-				String snapshotKey = snapshotKey(namespace, counterName);
-				String deltasKey = deltasKey(namespace, counterName);
+				String snapshotKey = CounterUtils.snapshotKey(namespace, counterName);
+				String deltasKey = CounterUtils.deltasKey(namespace, counterName);
 
 				long reconciled = reconcile(commands, snapshotKey, deltasKey);
 				return new CounterResult(reconciled, Instant.now(), CounterConsistency.ACCURATE, null);
@@ -95,8 +95,8 @@ public record AccurateCounter(RedisSentinelManager<String, String> manager, Stri
 	public void clear(String namespace, String counterName, IdempotencyToken token) throws CounterException {
 		try {
 			manager.executeSync(commands -> {
-				String snapshotKey = snapshotKey(namespace, counterName);
-				String deltasKey = deltasKey(namespace, counterName);
+				String snapshotKey = CounterUtils.snapshotKey(namespace, counterName);
+				String deltasKey = CounterUtils.deltasKey(namespace, counterName);
 
 				if (token != null) {
 					String idempotencyKey = CounterUtils.idempotencyKey(namespace, counterName, token);
@@ -137,13 +137,5 @@ public record AccurateCounter(RedisSentinelManager<String, String> manager, Stri
 		}
 
 		return snapshot;
-	}
-
-	private static String snapshotKey(String namespace, String counterName) {
-		return "counter:%s:%s:snapshot".formatted(namespace, counterName);
-	}
-
-	private static String deltasKey(String namespace, String counterName) {
-		return "counter:%s:%s:deltas".formatted(namespace, counterName);
 	}
 }

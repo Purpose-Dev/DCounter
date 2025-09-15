@@ -28,6 +28,14 @@ public final class CounterUtils {
 		return "counter:%s:%s:deltas:%s".formatted(namespace, counterNamePattern, "");
 	}
 
+	public static String snapshotKey(String namespace, String counterName) {
+		return "counter:%s:%s:snapshot".formatted(namespace, counterName);
+	}
+
+	public static String deltasKey(String namespace, String counterName) {
+		return "counter:%s:%s:deltas".formatted(namespace, counterName);
+	}
+
 	public static long parseLong(String redisValue) {
 		if (redisValue == null)
 			return 0L;
