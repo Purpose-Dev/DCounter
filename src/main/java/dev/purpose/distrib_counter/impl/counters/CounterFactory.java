@@ -3,6 +3,7 @@ package dev.purpose.distrib_counter.impl.counters;
 import dev.purpose.distrib_counter.core.AsyncCounter;
 import dev.purpose.distrib_counter.core.Counter;
 import dev.purpose.distrib_counter.core.CounterConsistency;
+import dev.purpose.distrib_counter.impl.counters.async.AccurateAsyncCounter;
 import dev.purpose.distrib_counter.impl.counters.async.BestEffortAsyncCounter;
 import dev.purpose.distrib_counter.impl.counters.async.EventuallyConsistentAsyncCounter;
 import dev.purpose.distrib_counter.impl.counters.sync.AccurateCounter;
@@ -87,7 +88,10 @@ public final class CounterFactory {
 				Objects.requireNonNull(nodeId, "nodeId required for eventually consistent async counter");
 				yield new EventuallyConsistentAsyncCounter(manager, nodeId);
 			}
-			case ACCURATE -> throw new UnsupportedOperationException("Accurate async counter not yet implemented");
+			case ACCURATE -> {
+				Objects.requireNonNull(nodeId, "nodeId required for accurate async counter");
+				yield new AccurateAsyncCounter(manager, nodeId);
+			}
 		};
 	}
 }
